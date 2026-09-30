@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SART Attention Task</title>
+<style>
+body { font-family: Arial, sans-serif; background:#f7f7f7; margin:0; }
+#app { max-width:760px; margin:0 auto; padding:40px 24px; text-align:center; }
+.card { background:white; padding:30px; border-radius:12px; box-shadow:0 2px 12px rgba(0,0,0,.08); }
+button { font-size:18px; padding:12px 24px; margin:8px; cursor:pointer; }
+#digit { font-size:110px; height:140px; line-height:140px; font-weight:bold; }
+#status { margin-top:12px; color:#555; }
+#results { text-align:left; }
+.small { color:#666; font-size:14px; }
+.hidden { display:none; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="card" id="instructions">
+    <h1>SART Attention Task</h1>
+    <p>You will see one digit at a time.</p>
+    <p><b>Press the SPACEBAR for every digit except 3.</b></p>
+    <p><b>Do NOT press the SPACEBAR when the digit is 3.</b></p>
+    <p>Respond as quickly and accurately as you can. Try to stay focused throughout the task.</p>
+    <p class="small">There will be 225 trials. The task takes about 4–5 minutes.</p>
+    <button id="start">Start Task</button>
+  </div>
+
+  <div class="card hidden" id="task">
+    <div id="progress">Trial 1 of 225</div>
+    <div id="digit">+</div>
+    <div id="status">Press SPACE for every digit except 3.</div>
+  </div>
+
+  <div class="card hidden" id="results">
+    <h2>Task Complete</h2>
+    <p>Your responses have been recorded for this session.</p>
+    <div id="resultText"></div>
+    <p class="small">Give this screen to the researcher. Do not restart the task unless instructed.</p>
+  </div>
+</div>
+
+<script>
+const sequence = [8, 4, 8, 9, 8, 1, 4, 6, 9, 4, 7, 1, 2, 4, 8, 8, 9, 8, 6, 9, 2, 8, 7, 5, 3, 4, 2, 4, 1, 1, 5, 1, 4, 4, 4, 5, 4, 9, 4, 1, 3, 9, 9, 9, 6, 6, 8, 2, 4, 4, 3, 8, 5, 1, 7, 5, 6, 1, 6, 4, 8, 5, 7, 7, 1, 8, 4, 1, 8, 3, 6, 6, 8, 6, 5, 4, 9, 1, 3, 9, 4, 9, 4, 1, 5, 6, 3, 9, 4, 1, 2, 5, 4, 3, 9, 3, 9, 4, 1, 1, 7, 1, 5, 3, 7, 7, 3, 2, 6, 7, 4, 8, 3, 7, 6, 3, 9, 1, 2, 6, 5, 5, 8, 2, 4, 3, 2, 2, 5, 2, 1, 7, 8, 4, 2, 3, 4, 4, 9, 9, 6, 2, 2, 5, 4, 3, 2, 3, 1, 8, 9, 6, 9, 5, 9, 3, 3, 7, 3, 6, 4, 6, 6, 6, 5, 5, 1, 2, 9, 7, 6, 2, 8, 4, 9, 8, 1, 1, 3, 1, 2, 9, 5, 7, 7, 9, 9, 7, 4, 8, 6, 3, 2, 5, 2, 4, 2, 9, 8, 6, 3, 2, 3, 1, 9, 6, 5, 4, 3, 5, 4, 3, 5, 2, 4, 4, 7, 4, 1, 8, 7, 9, 4, 7, 5];
+const STIMULUS_MS = 250;
+const ISI_MS = 900;
+let trial = 0;
+let waiting = false;
+let responded = false;
+let responseTime = null;
+let trialStart = null;
+let records = [];
+
+function show(id) {
+  document.querySelectorAll('.card').forEach(x => x.classList.add('hidden'));
+  document.getElementById(id).classList.remove('hidden');
+}
+
+function beginTrial() {
+  if (trial >= sequence.length) {
+    finish();
+    return;
+  }
+  document.getElementById('progress').textContent = `Trial ${trial+1} of ${sequence.length}`;
+  document.getElementById('digit').textContent = sequence[trial];
+  waiting = true;
+  responded = false;
+  responseTime = null;
+  trialStart = performance.now();
+
+  setTimeout(() => {
+    document.getElementById('digit').textContent = '+';
+  }, STIMULUS_MS);
+
+  setTimeout(() => {
+    const target = sequence[trial] === 3;
+    records.push({
+      trial: trial + 1,
+      digit: sequence[trial],
+      target: target,
+      responded: responded,
+      rt_ms: responseTime
+    });
+    trial++;
+    waiting = false;
+    beginTrial();
+  }, ISI_MS);
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.code !== 'Space' || !waiting || responded) return;
+  e.preventDefault();
+  responded = true;
+  responseTime = Math.round(performance.now() - trialStart);
+});
+
+document.getElementById('start').addEventListener('click', () => {
+  show('task');
+  setTimeout(beginTrial, 500);
+});
+
+function finish() {
+  show('results');
+  const go = records.filter(r => !r.target);
+  const nogo = records.filter(r => r.target);
+  const goOmissions = go.filter(r => !r.responded).length;
+  const nogoCommission = nogo.filter(r => r.responded).length;
+  const validRT = go.filter(r => r.responded).map(r => r.rt_ms);
+  const meanRT = validRT.length ? Math.round(validRT.reduce((a,b)=>a+b,0)/validRT.length) : null;
+  const accuracy = Math.round(100 * (1 - (goOmissions + nogoCommission)/records.length) * 10) / 10;
+
+  document.getElementById('resultText').innerHTML = `
+    <p><b>Total trials:</b> ${records.length}</p>
+    <p><b>Overall accuracy:</b> ${accuracy}%</p>
+    <p><b>Go omissions (missed responses):</b> ${goOmissions}</p>
+    <p><b>No-go commission errors (response to 3):</b> ${nogoCommission}</p>
+    <p><b>Mean response time for correct Go trials:</b> ${meanRT ?? 'N/A'} ms</p>
+    <p><b>Study ID:</b> <input id="sid" placeholder="Enter study ID"></p>
+    <button onclick="downloadCSV()">Download Results CSV</button>
+  `;
+}
+
+function downloadCSV() {
+  const sid = document.getElementById('sid').value.trim() || 'UNENTERED';
+  const rows = [['study_id','trial','digit','target_3','responded','rt_ms']];
+  records.forEach(r => rows.push([sid,r.trial,r.digit,r.target,r.responded,r.rt_ms ?? '']));
+  const csv = rows.map(r => r.join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `SART_${sid}_results.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+</script>
+</body>
+</html>
